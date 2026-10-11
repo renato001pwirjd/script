@@ -1,6 +1,5 @@
--- Rush PvP / Generic FPS Aimbot + Strong ESP
+-- Crush PvP — Aimbot Head-Only + Strong ESP
 -- Compat: Synapse, Krnl, Fluxus, Delta, Arceus X, Bacon
--- Serve em: Arsenal, Rush, Frontlines, Bad Business, Phantom Forces (genérico)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -14,22 +13,17 @@ local Mouse = LocalPlayer:GetMouse()
 -- CONFIG
 -- ============================================================
 local Config = {
-    -- aimbot
     AimbotEnabled = true,
-    AimKey = Enum.UserInputType.MouseButton2,  -- botão direito segura pra mirar
-    AimbotMode = "Hold",                        -- "Hold" | "Toggle" | "Always"
+    AimKey = Enum.UserInputType.MouseButton2,
     FOV = 200,
-    Smoothness = 0.25,                          -- 1.0 = instantâneo, 0.0 = nunca chega
-    TargetPart = "Head",                        -- "Head" | "HumanoidRootPart" | "UpperTorso"
-    Prediction = 0.13,                          -- segundos de predição de movimento
+    Smoothness = 0.25,
+    Prediction = 0.13,
     TeamCheck = true,
     WallCheck = true,
-    VisCheck = true,
-    MaxDist = 1000,
+    MaxDist = 1500,
     ShowFOVCircle = true,
     ShowTargetLine = true,
 
-    -- esp
     EspEnabled = true,
     EspBox = true,
     EspName = true,
@@ -40,12 +34,12 @@ local Config = {
     EspHeadDot = true,
     EspChams = true,
     EspTeamColor = true,
-    EspMaxDist = 2000,
+    EspMaxDist = 2500,
     EspTextSize = 12,
 }
 
 -- ============================================================
--- UTILS
+-- UTILS — HEAD-ONLY
 -- ============================================================
 local function isAlive(plr)
     local char = plr and plr.Character
@@ -59,33 +53,62 @@ local function sameTeam(plr)
     return plr.Team == LocalPlayer.Team
 end
 
+-- retorna SOMENTE a cabeça — nunca HRP, nunca torso
+-- cobre: R6 "Head", R15 "Head", custom head models (HeadHitbox, HeadPart, head)
+local function getHead(plr)
+    local char = plr.Character
+    if not char then return nil end
+    -- tenta o nome padrão primeiro
+    local h = char:FindFirstChild("Head")
+    if h and h:IsA("BasePart") then return h end
+    -- fallbacks pra jogos custom
+    local names = { "HeadHitbox", "HeadPart", "head", "HEAD", "Hitbox_Head" }
+    for _, n in ipairs(names) do
+        local p = char:FindFirstChild(n)
+        if p and p:IsA("BasePart") then return p end
+    end
+    -- último recurso: filho de Humanoid.Rig com nome contendo "head"
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        for _, d in ipairs(hum:GetDescendants()) do
+            if d:IsA("BasePart") and d.Name:lower():find("head") then return d end
+        end
+    end
+    return nil
+end
+
 local function hasLOS(target)
     local myChar = LocalPlayer.Character
     if not myChar then return false end
     local myRoot = myChar:FindFirstChild("HumanoidRootPart")
     if not myRoot then return false end
-    local tChar = target.Character
-    if not tChar then return false end
-    local tHead = tChar:FindFirstChild("Head") or tChar:FindFirstChild("HumanoidRootPart")
+    local tHead = getHead(target)
     if not tHead then return false end
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = { myChar, tChar, Camera }
+    params.FilterDescendantsInstances = { myChar, target.Character, Camera }
     local ray = workspace:Raycast(myRoot.Position, tHead.Position - myRoot.Position, params)
     return ray == nil
-end
-
-local function getTargetPart(plr)
-    local char = plr.Character
-    if not char then return nil end
-    return char:FindFirstChild(Config.TargetPart)
-        or char:FindFirstChild("Head")
-        or char:FindFirstChild("HumanoidRootPart")
 end
 
 local function worldToScreen(pos)
     local sp, onScreen = Camera:WorldToViewportPoint(pos)
     return Vector3.new(sp.X, sp.Y, sp.Z), onScreen
+end
+
+-- aim: SOMENTE cabeça
+local function getAimPos(plr)
+    local head = getHead(plr)
+    if not head then return nil end
+    local pos = head.Position
+    if Config.Prediction > 0 then
+        local char = plr.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            pos = pos + hrp.AssemblyLinearVelocity * Config.Prediction
+        end
+    end
+    return pos
 end
 
 local function getClosestTarget()
@@ -99,13 +122,13 @@ local function getClosestTarget()
         if not isAlive(plr) then continue end
         if Config.TeamCheck and sameTeam(plr) then continue end
 
-        local part = getTargetPart(plr)
-        if not part then continue end
+        local head = getHead(plr)
+        if not head then continue end
 
-        local dist3D = (part.Position - myPos).Magnitude
+        local dist3D = (head.Position - myPos).Magnitude
         if dist3D > Config.MaxDist then continue end
 
-        local screenPos, onScreen = worldToScreen(part.Position)
+        local screenPos, onScreen = worldToScreen(head.Position)
         if not onScreen then continue end
 
         local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
@@ -113,45 +136,27 @@ local function getClosestTarget()
 
         if Config.WallCheck and not hasLOS(plr) then continue end
 
-        -- score: distância na tela + distância 3D (prioriza perto + centralizado)
         local score = dist + dist3D * 0.02
         if score < bestScore then
             bestScore = score
             best = plr
         end
     end
-    return best, bestScore
-end
-
-local function getAimPos(plr)
-    local char = plr.Character
-    if not char then return nil end
-    local part = char:FindFirstChild(Config.TargetPart)
-        or char:FindFirstChild("Head")
-        or char:FindFirstChild("HumanoidRootPart")
-    if not part then return nil end
-    local pos = part.Position
-    if Config.Prediction > 0 then
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            pos = pos + hrp.AssemblyLinearVelocity * Config.Prediction
-        end
-    end
-    return pos
+    return best
 end
 
 -- ============================================================
 -- GUI
 -- ============================================================
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "RushPvP_Aim"
+ScreenGui.Name = "CrushPvP_Aim"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = (gethui and gethui()) or game:GetService("CoreGui")
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 340, 0, 620)
-Main.Position = UDim2.new(0.5, -170, 0.5, -310)
+Main.Size = UDim2.new(0, 340, 0, 560)
+Main.Position = UDim2.new(0.5, -170, 0.5, -280)
 Main.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 Main.BorderSizePixel = 0
 Main.Active = true
@@ -182,7 +187,7 @@ local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -80, 1, 0)
 Title.Position = UDim2.new(0, 18, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "RUSH PVP  //  AIM + ESP"
+Title.Text = "CRUSH PVP  //  HEADLOCK"
 Title.TextColor3 = Color3.fromRGB(255, 220, 230)
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Font = Enum.Font.GothamBold
@@ -349,8 +354,8 @@ local function makeSlider(name, min, max, default, callback)
     end)
 end
 
--- AIMBOT CONTROLS
-makeSection("— AIMBOT —")
+-- CONTROLES
+makeSection("— AIMBOT (HEAD ONLY) —")
 makeToggle("Aimbot", Config.AimbotEnabled, function(v) Config.AimbotEnabled = v end)
 makeToggle("Team Check", Config.TeamCheck, function(v) Config.TeamCheck = v end)
 makeToggle("Wall Check", Config.WallCheck, function(v) Config.WallCheck = v end)
@@ -361,7 +366,6 @@ makeSlider("Smoothness", 0.05, 1.0, Config.Smoothness, function(v) Config.Smooth
 makeSlider("Prediction", 0, 0.5, Config.Prediction, function(v) Config.Prediction = v end)
 makeSlider("Max Dist", 100, 3000, Config.MaxDist, function(v) Config.MaxDist = v end)
 
--- ESP CONTROLS
 makeSection("— ESP —")
 makeToggle("ESP", Config.EspEnabled, function(v) Config.EspEnabled = v end)
 makeToggle("Box", Config.EspBox, function(v) Config.EspBox = v end)
@@ -376,18 +380,17 @@ makeToggle("Team Color", Config.EspTeamColor, function(v) Config.EspTeamColor = 
 makeSlider("ESP Max Dist", 200, 5000, Config.EspMaxDist, function(v) Config.EspMaxDist = v end)
 makeSlider("Text Size", 8, 20, Config.EspTextSize, function(v) Config.EspTextSize = v end)
 
--- minimize
 local minimized = false
 MinBtn.MouseButton1Click:Connect(function()
     minimized = not minimized
     TweenService:Create(Main, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
-        Size = minimized and UDim2.new(0, 340, 0, 46) or UDim2.new(0, 340, 0, 620)
+        Size = minimized and UDim2.new(0, 340, 0, 46) or UDim2.new(0, 340, 0, 560)
     }):Play()
     Scroll.Visible = not minimized
 end)
 
 -- ============================================================
--- FOV CIRCLE
+-- FOV CIRCLE + TARGET LINE
 -- ============================================================
 local FOVGui = Instance.new("ScreenGui")
 FOVGui.Name = "FOVCircle"
@@ -408,7 +411,6 @@ CircleStroke.Thickness = 1.5
 CircleStroke.Transparency = 0.4
 CircleStroke.Parent = FOVCircle
 
--- Target Line (linha da câmera pro alvo)
 local TargetLine = Instance.new("Frame")
 TargetLine.BackgroundColor3 = Color3.fromRGB(255, 60, 90)
 TargetLine.BorderSizePixel = 0
@@ -417,11 +419,25 @@ TargetLine.Visible = false
 TargetLine.ZIndex = 0
 TargetLine.Parent = FOVGui
 
+-- crosshair no head do alvo atual
+local HeadMarker = Instance.new("Frame")
+HeadMarker.Size = UDim2.new(0, 18, 0, 18)
+HeadMarker.AnchorPoint = Vector2.new(0.5, 0.5)
+HeadMarker.BackgroundTransparency = 1
+HeadMarker.Visible = false
+HeadMarker.Parent = FOVGui
+
+local HeadMarkerStroke = Instance.new("UIStroke")
+HeadMarkerStroke.Color = Color3.fromRGB(255, 60, 90)
+HeadMarkerStroke.Thickness = 2
+HeadMarkerStroke.Parent = HeadMarker
+Instance.new("UICorner", HeadMarker).CornerRadius = UDim.new(1, 0)
+
 -- ============================================================
 -- ESP
 -- ============================================================
 local EspGui = Instance.new("ScreenGui")
-EspGui.Name = "RushPvP_ESP"
+EspGui.Name = "CrushPvP_ESP"
 EspGui.ResetOnSpawn = false
 EspGui.IgnoreGuiInset = true
 EspGui.Parent = ScreenGui.Parent
@@ -524,7 +540,6 @@ local function removeEspFor(plr)
     end
 end
 
--- Skeleton connection map (R6 e R15)
 local SKELETON_R6 = {
     {"Head", "Torso"},
     {"Torso", "Left Arm"}, {"Torso", "Right Arm"},
@@ -573,7 +588,7 @@ local function drawSkeleton(cache, char, color)
 end
 
 -- ============================================================
--- INPUT STATE
+-- INPUT
 -- ============================================================
 local aimActive = false
 UserInputService.InputBegan:Connect(function(input, gp)
@@ -590,10 +605,8 @@ UserInputService.InputEnded:Connect(function(input, gp)
 end)
 
 -- ============================================================
--- MAIN LOOP
+-- LOOP
 -- ============================================================
-local currentTarget = nil
-
 RunService.RenderStepped:Connect(function()
     -- FOV circle
     if Config.ShowFOVCircle then
@@ -605,12 +618,11 @@ RunService.RenderStepped:Connect(function()
         FOVCircle.Visible = false
     end
 
-    -- AIMBOT
+    -- AIMBOT — SOMENTE CABEÇA
     local target = nil
     if Config.AimbotEnabled and aimActive then
         target = getClosestTarget()
     end
-    currentTarget = target
 
     if target then
         local aimPos = getAimPos(target)
@@ -620,7 +632,16 @@ RunService.RenderStepped:Connect(function()
             local targetCF = CFrame.new(camCF.Position, camCF.Position + dir)
             Camera.CFrame = camCF:Lerp(targetCF, 1 - Config.Smoothness)
 
-            -- target line
+            -- marca a cabeça do alvo atual
+            local hsp, hon = worldToScreen(aimPos)
+            if hon then
+                HeadMarker.Visible = true
+                HeadMarker.Position = UDim2.new(0, hsp.X, 0, hsp.Y)
+                HeadMarkerStroke.Color = Color3.fromRGB(255, 60, 90)
+            else
+                HeadMarker.Visible = false
+            end
+
             if Config.ShowTargetLine then
                 local sp, on = worldToScreen(aimPos)
                 if on then
@@ -641,6 +662,7 @@ RunService.RenderStepped:Connect(function()
         end
     else
         TargetLine.Visible = false
+        HeadMarker.Visible = false
     end
 
     -- ESP
@@ -662,23 +684,26 @@ RunService.RenderStepped:Connect(function()
 
         local char = plr.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        local head = char and char:FindFirstChild("Head")
         local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if not (hrp and head and hum) then continue end
+        local head = getHead(plr)
+        if not (hrp and hum and head) then continue end
 
         local dist3D = (hrp.Position - myPos).Magnitude
         if dist3D > Config.EspMaxDist then
-            if cache then cache.box.Visible = false; cache.headDot.Visible = false; cache.tracer.Visible = false end
+            if cache then
+                cache.box.Visible = false; cache.headDot.Visible = false; cache.tracer.Visible = false
+                for _, l in ipairs(cache.skeletonLines) do l.Visible = false end
+            end
             continue
         end
 
-        -- Box corners
-        local top = (head.Position + Vector3.new(0, 1.8, 0))
-        local bottom = (hrp.Position - Vector3.new(0, 3, 0))
-        local topSP, onA = worldToScreen(top)
-        local bottomSP, onB = worldToScreen(bottom)
+        local topSP, onA = worldToScreen(head.Position + Vector3.new(0, 1.2, 0))
+        local bottomSP, onB = worldToScreen(hrp.Position - Vector3.new(0, 3, 0))
         if not (onA and onB) then
-            if cache then cache.box.Visible = false; cache.headDot.Visible = false; cache.tracer.Visible = false end
+            if cache then
+                cache.box.Visible = false; cache.headDot.Visible = false; cache.tracer.Visible = false
+                for _, l in ipairs(cache.skeletonLines) do l.Visible = false end
+            end
             continue
         end
 
@@ -694,15 +719,10 @@ RunService.RenderStepped:Connect(function()
         cache.box.Position = UDim2.new(0, cx - width / 2, 0, topSP.Y)
         cache.box.Size = UDim2.new(0, width, 0, height)
 
-        -- cor: team ou inimigo
         local color = Color3.fromRGB(255, 60, 90)
         if Config.EspTeamColor then
             if LocalPlayer.Team and plr.Team then
-                if plr.Team == LocalPlayer.Team then
-                    color = Color3.fromRGB(80, 220, 120)
-                else
-                    color = Color3.fromRGB(255, 60, 90)
-                end
+                color = (plr.Team == LocalPlayer.Team) and Color3.fromRGB(80, 220, 120) or Color3.fromRGB(255, 60, 90)
             elseif plr.Team then
                 color = plr.Team.TeamColor.Color
             end
@@ -711,7 +731,6 @@ RunService.RenderStepped:Connect(function()
         cache.stroke.Color = color
         cache.stroke.Transparency = vis and 0.1 or 0.65
 
-        -- info
         local lines = {}
         if Config.EspName then table.insert(lines, plr.Name) end
         cache.info.Text = table.concat(lines, "  •  ")
@@ -720,7 +739,6 @@ RunService.RenderStepped:Connect(function()
         cache.info.TextColor3 = color
         cache.info.TextSize = Config.EspTextSize
 
-        -- distance
         if Config.EspDistance then
             cache.dist.Visible = true
             cache.dist.Text = string.format("%d m", math.floor(dist3D))
@@ -730,7 +748,6 @@ RunService.RenderStepped:Connect(function()
             cache.dist.Visible = false
         end
 
-        -- health
         if Config.EspHealth then
             cache.healthBarBg.Visible = true
             local hpct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
@@ -747,7 +764,6 @@ RunService.RenderStepped:Connect(function()
             cache.healthBarBg.Visible = false
         end
 
-        -- head dot
         if Config.EspHeadDot then
             local hsp, hon = worldToScreen(head.Position)
             if hon then
@@ -758,7 +774,6 @@ RunService.RenderStepped:Connect(function()
             end
         end
 
-        -- tracer
         if Config.EspTracer then
             local startPos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
             local endPos = Vector2.new(bottomSP.X, bottomSP.Y)
@@ -772,14 +787,12 @@ RunService.RenderStepped:Connect(function()
             cache.tracer.BackgroundColor3 = color
         end
 
-        -- skeleton
         if Config.EspSkeleton then
             drawSkeleton(cache, char, color)
         else
             for _, l in ipairs(cache.skeletonLines) do l.Visible = false end
         end
 
-        -- chams local (highlight via Instances temporário)
         if Config.EspChams then
             local hl = char:FindFirstChild("__ESP_HL")
             if not hl then
@@ -799,10 +812,9 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- limpar ESP quando player sair
 Players.PlayerRemoving:Connect(function(plr)
     removeEspFor(plr)
 end)
 
-print("[Rush PvP Aim+ESP] carregado")
+print("[Crush PvP Headlock] carregado")
 print("Hotkeys: RightShift=Aimbot | Insert=ESP | Botão direito = segurar mira")
