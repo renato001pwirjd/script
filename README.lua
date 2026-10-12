@@ -1,46 +1,51 @@
--- Crush PvP — Aimbot Head-Only + Strong ESP
--- Compat: Synapse, Krnl, Fluxus, Delta, Arceus X, Bacon
+-- ═══════════════════════════════════════════════════════════
+--   ZEUS AIMBOT  //  CRUSH PVP EDITION
+--   Design: pvp hack menu
+--   Compat: Synapse, Krnl, Fluxus, Delta, Arceus X, Bacon
+-- ═══════════════════════════════════════════════════════════
 
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
-local Mouse = LocalPlayer:GetMouse()
+local TweenService     = game:GetService("TweenService")
+local LocalPlayer      = Players.LocalPlayer
+local Camera           = workspace.CurrentCamera
+local Mouse            = LocalPlayer:GetMouse()
 
--- ============================================================
--- CONFIG
--- ============================================================
+-- ═══════════════════════════════════════════════════════════
+--  CONFIG  (tudo OFF por padrão)
+-- ═══════════════════════════════════════════════════════════
 local Config = {
-    AimbotEnabled = true,
-    AimKey = Enum.UserInputType.MouseButton2,
-    FOV = 200,
-    Smoothness = 0.25,
-    Prediction = 0.13,
-    TeamCheck = true,
-    WallCheck = true,
-    MaxDist = 1500,
-    ShowFOVCircle = true,
-    ShowTargetLine = true,
+    -- AIMBOT
+    Aimbot        = false,
+    AimKey        = Enum.UserInputType.MouseButton2,
+    FOV           = 200,
+    Smoothness    = 0.25,
+    Prediction    = 0.13,
+    TeamCheck     = true,
+    WallCheck     = true,
+    MaxDist       = 1500,
+    FovCircle     = false,
+    TargetLine    = false,
 
-    EspEnabled = true,
-    EspBox = true,
-    EspName = true,
-    EspHealth = true,
-    EspDistance = true,
-    EspTracer = true,
-    EspSkeleton = true,
-    EspHeadDot = true,
-    EspChams = true,
-    EspTeamColor = true,
-    EspMaxDist = 2500,
-    EspTextSize = 12,
+    -- ESP
+    Esp           = false,
+    EspBox        = false,
+    EspName       = false,
+    EspHealth     = false,
+    EspDistance   = false,
+    EspTracer     = false,
+    EspSkeleton   = false,
+    EspHeadDot    = false,
+    EspChams      = false,
+    EspTeamColor  = true,
+    EspMaxDist    = 2500,
+    EspTextSize   = 12,
 }
 
--- ============================================================
--- UTILS — HEAD-ONLY
--- ============================================================
+-- ═══════════════════════════════════════════════════════════
+--  UTILS
+-- ═══════════════════════════════════════════════════════════
 local function isAlive(plr)
     local char = plr and plr.Character
     if not char then return false end
@@ -53,21 +58,15 @@ local function sameTeam(plr)
     return plr.Team == LocalPlayer.Team
 end
 
--- retorna SOMENTE a cabeça — nunca HRP, nunca torso
--- cobre: R6 "Head", R15 "Head", custom head models (HeadHitbox, HeadPart, head)
 local function getHead(plr)
     local char = plr.Character
     if not char then return nil end
-    -- tenta o nome padrão primeiro
     local h = char:FindFirstChild("Head")
     if h and h:IsA("BasePart") then return h end
-    -- fallbacks pra jogos custom
-    local names = { "HeadHitbox", "HeadPart", "head", "HEAD", "Hitbox_Head" }
-    for _, n in ipairs(names) do
+    for _, n in ipairs({ "HeadHitbox", "HeadPart", "head", "HEAD", "Hitbox_Head" }) do
         local p = char:FindFirstChild(n)
         if p and p:IsA("BasePart") then return p end
     end
-    -- último recurso: filho de Humanoid.Rig com nome contendo "head"
     local hum = char:FindFirstChildOfClass("Humanoid")
     if hum then
         for _, d in ipairs(hum:GetDescendants()) do
@@ -96,7 +95,6 @@ local function worldToScreen(pos)
     return Vector3.new(sp.X, sp.Y, sp.Z), onScreen
 end
 
--- aim: SOMENTE cabeça
 local function getAimPos(plr)
     local head = getHead(plr)
     if not head then return nil end
@@ -145,104 +143,302 @@ local function getClosestTarget()
     return best
 end
 
--- ============================================================
--- GUI
--- ============================================================
+-- ═══════════════════════════════════════════════════════════
+--  THEME
+-- ═══════════════════════════════════════════════════════════
+local Theme = {
+    Bg          = Color3.fromRGB(10, 10, 14),
+    BgAlt       = Color3.fromRGB(16, 16, 22),
+    Card        = Color3.fromRGB(20, 20, 28),
+    CardHover   = Color3.fromRGB(26, 26, 36),
+    Border      = Color3.fromRGB(40, 40, 55),
+    Text        = Color3.fromRGB(235, 235, 245),
+    TextDim     = Color3.fromRGB(140, 140, 160),
+    Accent      = Color3.fromRGB(120, 100, 255),   -- roxo zeus
+    AccentAlt   = Color3.fromRGB(255, 200, 80),    -- dourado
+    Danger      = Color3.fromRGB(255, 70, 100),
+    Success     = Color3.fromRGB(80, 220, 130),
+}
+
+-- ═══════════════════════════════════════════════════════════
+--  GUI ROOT
+-- ═══════════════════════════════════════════════════════════
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "CrushPvP_Aim"
+ScreenGui.Name = "ZeusAimbot"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.IgnoreGuiInset = true
 ScreenGui.Parent = (gethui and gethui()) or game:GetService("CoreGui")
 
+-- ═══════════════════════════════════════════════════════════
+--  TOGGLE BUTTON (floating, canto sup esq)
+-- ═══════════════════════════════════════════════════════════
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "ZeusToggle"
+ToggleBtn.Size = UDim2.new(0, 46, 0, 46)
+ToggleBtn.Position = UDim2.new(0, 20, 0, 80)
+ToggleBtn.BackgroundColor3 = Theme.Bg
+ToggleBtn.BorderSizePixel = 0
+ToggleBtn.Text = "Z"
+ToggleBtn.TextColor3 = Theme.AccentAlt
+ToggleBtn.Font = Enum.Font.GothamBlack
+ToggleBtn.TextSize = 22
+ToggleBtn.AutoButtonColor = false
+ToggleBtn.Parent = ScreenGui
+Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(0, 12)
+
+local ToggleStroke = Instance.new("UIStroke")
+ToggleStroke.Color = Theme.Accent
+ToggleStroke.Thickness = 2
+ToggleStroke.Parent = ToggleBtn
+
+local ToggleGlow = Instance.new("ImageLabel")
+ToggleGlow.Size = UDim2.new(1, 24, 1, 24)
+ToggleGlow.Position = UDim2.new(0, -12, 0, -12)
+ToggleGlow.BackgroundTransparency = 1
+ToggleGlow.Image = "rbxassetid://5028857084"
+ToggleGlow.ImageColor3 = Theme.Accent
+ToggleGlow.ImageTransparency = 0.6
+ToggleGlow.ZIndex = 0
+ToggleGlow.Parent = ToggleBtn
+
+ToggleBtn.MouseEnter:Connect(function()
+    TweenService:Create(ToggleStroke, TweenInfo.new(0.15), { Thickness = 3, Color = Theme.AccentAlt }):Play()
+end)
+ToggleBtn.MouseLeave:Connect(function()
+    TweenService:Create(ToggleStroke, TweenInfo.new(0.15), { Thickness = 2, Color = Theme.Accent }):Play()
+end)
+
+-- ═══════════════════════════════════════════════════════════
+--  MAIN WINDOW
+-- ═══════════════════════════════════════════════════════════
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 340, 0, 560)
-Main.Position = UDim2.new(0.5, -170, 0.5, -280)
-Main.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+Main.Name = "ZeusMain"
+Main.Size = UDim2.new(0, 400, 0, 340)
+Main.Position = UDim2.new(0.5, -200, 0.5, -170)
+Main.BackgroundColor3 = Theme.Bg
 Main.BorderSizePixel = 0
 Main.Active = true
 Main.Draggable = true
+Main.Visible = true
 Main.Parent = ScreenGui
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 14)
 
-local Stroke = Instance.new("UIStroke")
-Stroke.Color = Color3.fromRGB(255, 60, 90)
-Stroke.Thickness = 1.5
-Stroke.Parent = Main
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Theme.Accent
+MainStroke.Thickness = 1.5
+MainStroke.Transparency = 0.3
+MainStroke.Parent = Main
 
+-- glow externo
+local MainGlow = Instance.new("ImageLabel")
+MainGlow.Size = UDim2.new(1, 60, 1, 60)
+MainGlow.Position = UDim2.new(0, -30, 0, -30)
+MainGlow.BackgroundTransparency = 1
+MainGlow.Image = "rbxassetid://5028857084"
+MainGlow.ImageColor3 = Theme.Accent
+MainGlow.ImageTransparency = 0.75
+MainGlow.ZIndex = 0
+MainGlow.Parent = Main
+
+-- ─────────── HEADER ───────────
 local Header = Instance.new("Frame")
-Header.Size = UDim2.new(1, 0, 0, 46)
-Header.BackgroundColor3 = Color3.fromRGB(25, 20, 28)
+Header.Size = UDim2.new(1, 0, 0, 54)
+Header.BackgroundColor3 = Theme.BgAlt
 Header.BorderSizePixel = 0
 Header.Parent = Main
 Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 14)
 
 local HeaderFix = Instance.new("Frame")
-HeaderFix.Size = UDim2.new(1, 0, 0, 12)
-HeaderFix.Position = UDim2.new(0, 0, 1, -12)
-HeaderFix.BackgroundColor3 = Color3.fromRGB(25, 20, 28)
+HeaderFix.Size = UDim2.new(1, 0, 0, 14)
+HeaderFix.Position = UDim2.new(0, 0, 1, -14)
+HeaderFix.BackgroundColor3 = Theme.BgAlt
 HeaderFix.BorderSizePixel = 0
 HeaderFix.Parent = Header
 
+-- header gradient
+local HeaderGrad = Instance.new("UIGradient")
+HeaderGrad.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Theme.BgAlt),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(28, 22, 45)),
+}
+HeaderGrad.Rotation = 25
+HeaderGrad.Parent = Header
+
+-- logo "Z"
+local LogoFrame = Instance.new("Frame")
+LogoFrame.Size = UDim2.new(0, 36, 0, 36)
+LogoFrame.Position = UDim2.new(0, 12, 0.5, -18)
+LogoFrame.BackgroundColor3 = Theme.Accent
+LogoFrame.BorderSizePixel = 0
+LogoFrame.Parent = Header
+Instance.new("UICorner", LogoFrame).CornerRadius = UDim.new(0, 10)
+
+local LogoText = Instance.new("TextLabel")
+LogoText.Size = UDim2.new(1, 0, 1, 0)
+LogoText.BackgroundTransparency = 1
+LogoText.Text = "Z"
+LogoText.TextColor3 = Color3.fromRGB(255, 255, 255)
+LogoText.Font = Enum.Font.GothamBlack
+LogoText.TextSize = 20
+LogoText.Parent = LogoFrame
+
+-- título
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -80, 1, 0)
-Title.Position = UDim2.new(0, 18, 0, 0)
+Title.Size = UDim2.new(1, -180, 0, 18)
+Title.Position = UDim2.new(0, 58, 0, 10)
 Title.BackgroundTransparency = 1
-Title.Text = "CRUSH PVP  //  HEADLOCK"
-Title.TextColor3 = Color3.fromRGB(255, 220, 230)
+Title.Text = "ZEUS AIMBOT"
+Title.TextColor3 = Theme.Text
 Title.TextXAlignment = Enum.TextXAlignment.Left
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 14
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 16
 Title.Parent = Header
 
-local MinBtn = Instance.new("TextButton")
-MinBtn.Size = UDim2.new(0, 28, 0, 28)
-MinBtn.Position = UDim2.new(1, -36, 0, 9)
-MinBtn.BackgroundColor3 = Color3.fromRGB(50, 35, 45)
-MinBtn.Text = "—"
-MinBtn.TextColor3 = Color3.fromRGB(255, 220, 230)
-MinBtn.Font = Enum.Font.GothamBold
-MinBtn.TextSize = 16
-MinBtn.BorderSizePixel = 0
-MinBtn.Parent = Header
-Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 6)
+local Subtitle = Instance.new("TextLabel")
+Subtitle.Size = UDim2.new(1, -180, 0, 14)
+Subtitle.Position = UDim2.new(0, 58, 0, 28)
+Subtitle.BackgroundTransparency = 1
+Subtitle.Text = "crush pvp edition"
+Subtitle.TextColor3 = Theme.AccentAlt
+Subtitle.TextXAlignment = Enum.TextXAlignment.Left
+Subtitle.Font = Enum.Font.Gotham
+Subtitle.TextSize = 11
+Subtitle.Parent = Header
 
-local Scroll = Instance.new("ScrollingFrame")
-Scroll.Size = UDim2.new(1, -24, 1, -60)
-Scroll.Position = UDim2.new(0, 12, 0, 54)
-Scroll.BackgroundTransparency = 1
-Scroll.BorderSizePixel = 0
-Scroll.ScrollBarThickness = 4
-Scroll.ScrollBarImageColor3 = Color3.fromRGB(255, 60, 90)
-Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-Scroll.Parent = Main
+-- botão fechar
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 24, 0, 24)
+CloseBtn.Position = UDim2.new(1, -34, 0.5, -12)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(40, 20, 30)
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = Theme.Danger
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 18
+CloseBtn.BorderSizePixel = 0
+CloseBtn.AutoButtonColor = false
+CloseBtn.Parent = Header
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
 
-local UIList = Instance.new("UIListLayout")
-UIList.Padding = UDim.new(0, 6)
-UIList.SortOrder = Enum.SortOrder.LayoutOrder
-UIList.Parent = Scroll
-
-UIList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    Scroll.CanvasSize = UDim2.new(0, 0, 0, UIList.AbsoluteContentSize.Y + 8)
+CloseBtn.MouseButton1Click:Connect(function()
+    TweenService:Create(Main, TweenInfo.new(0.15), {
+        Size = UDim2.new(0, 0, 0, 0),
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+    }):Play()
+    task.wait(0.15)
+    Main.Visible = false
 end)
 
-local function makeSection(text)
-    local H = Instance.new("TextLabel")
-    H.Size = UDim2.new(1, 0, 0, 22)
-    H.BackgroundTransparency = 1
-    H.Text = text
-    H.TextColor3 = Color3.fromRGB(255, 60, 90)
-    H.TextXAlignment = Enum.TextXAlignment.Left
-    H.Font = Enum.Font.GothamBold
-    H.TextSize = 11
-    H.Parent = Scroll
+-- ─────────── TAB BAR ───────────
+local TabBar = Instance.new("Frame")
+TabBar.Size = UDim2.new(1, -24, 0, 32)
+TabBar.Position = UDim2.new(0, 12, 0, 60)
+TabBar.BackgroundColor3 = Theme.BgAlt
+TabBar.BorderSizePixel = 0
+TabBar.Parent = Main
+Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 8)
+
+local TabList = Instance.new("UIListLayout")
+TabList.FillDirection = Enum.FillDirection.Horizontal
+TabList.Padding = UDim.new(0, 4)
+TabList.SortOrder = Enum.SortOrder.LayoutOrder
+TabList.VerticalAlignment = Enum.VerticalAlignment.Center
+TabList.Parent = TabBar
+
+local TabPad = Instance.new("UIPadding")
+TabPad.PaddingLeft = UDim.new(0, 4)
+TabPad.PaddingRight = UDim.new(0, 4)
+TabPad.Parent = TabBar
+
+local Tabs = {}
+local TabContent = {}
+
+local function switchTab(name)
+    for tname, btn in pairs(Tabs) do
+        local active = (tname == name)
+        TweenService:Create(btn, TweenInfo.new(0.15), {
+            BackgroundColor3 = active and Theme.Accent or Theme.BgAlt,
+        }):Play()
+        btn.TextColor3 = active and Color3.fromRGB(255, 255, 255) or Theme.TextDim
+    end
+    for cname, frame in pairs(TabContent) do
+        frame.Visible = (cname == name)
+    end
 end
 
-local function makeToggle(name, default, callback)
+local function makeTab(name, label)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 90, 0, 24)
+    btn.BackgroundColor3 = Theme.BgAlt
+    btn.Text = label
+    btn.TextColor3 = Theme.TextDim
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 12
+    btn.BorderSizePixel = 0
+    btn.AutoButtonColor = false
+    btn.Parent = TabBar
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+    Tabs[name] = btn
+
+    local frame = Instance.new("ScrollingFrame")
+    frame.Size = UDim2.new(1, -24, 1, -156)
+    frame.Position = UDim2.new(0, 12, 0, 100)
+    frame.BackgroundTransparency = 1
+    frame.BorderSizePixel = 0
+    frame.ScrollBarThickness = 3
+    frame.ScrollBarImageColor3 = Theme.Accent
+    frame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    frame.Visible = false
+    frame.Parent = Main
+    TabContent[name] = frame
+
+    local list = Instance.new("UIListLayout")
+    list.Padding = UDim.new(0, 6)
+    list.SortOrder = Enum.SortOrder.LayoutOrder
+    list.Parent = frame
+
+    list:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        frame.CanvasSize = UDim2.new(0, 0, 0, list.AbsoluteContentSize.Y + 8)
+    end)
+
+    btn.MouseButton1Click:Connect(function() switchTab(name) end)
+    return frame
+end
+
+-- ─────────── WIDGETS ───────────
+local function makeSection(parent, text)
+    local sec = Instance.new("Frame")
+    sec.Size = UDim2.new(1, 0, 0, 26)
+    sec.BackgroundTransparency = 1
+    sec.Parent = parent
+
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(0, 3, 0, 14)
+    bar.Position = UDim2.new(0, 0, 0.5, -7)
+    bar.BackgroundColor3 = Theme.Accent
+    bar.BorderSizePixel = 0
+    bar.Parent = sec
+    Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -12, 1, 0)
+    lbl.Position = UDim2.new(0, 10, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = text:upper()
+    lbl.TextColor3 = Theme.AccentAlt
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 11
+    lbl.Parent = sec
+end
+
+local function makeToggle(parent, name, default, callback)
     local Row = Instance.new("Frame")
-    Row.Size = UDim2.new(1, 0, 0, 32)
-    Row.BackgroundColor3 = Color3.fromRGB(22, 20, 26)
+    Row.Size = UDim2.new(1, 0, 0, 34)
+    Row.BackgroundColor3 = Theme.Card
     Row.BorderSizePixel = 0
-    Row.Parent = Scroll
+    Row.Parent = parent
     Instance.new("UICorner", Row).CornerRadius = UDim.new(0, 8)
 
     local Label = Instance.new("TextLabel")
@@ -250,16 +446,16 @@ local function makeToggle(name, default, callback)
     Label.Position = UDim2.new(0, 12, 0, 0)
     Label.BackgroundTransparency = 1
     Label.Text = name
-    Label.TextColor3 = Color3.fromRGB(220, 210, 220)
+    Label.TextColor3 = Theme.Text
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.Font = Enum.Font.Gotham
-    Label.TextSize = 12
+    Label.TextSize = 13
     Label.Parent = Row
 
     local Toggle = Instance.new("TextButton")
     Toggle.Size = UDim2.new(0, 42, 0, 20)
     Toggle.Position = UDim2.new(1, -54, 0.5, -10)
-    Toggle.BackgroundColor3 = default and Color3.fromRGB(255, 60, 90) or Color3.fromRGB(45, 40, 50)
+    Toggle.BackgroundColor3 = default and Theme.Accent or Color3.fromRGB(45, 45, 58)
     Toggle.Text = ""
     Toggle.BorderSizePixel = 0
     Toggle.AutoButtonColor = false
@@ -278,7 +474,7 @@ local function makeToggle(name, default, callback)
     local function update(v)
         state = v
         TweenService:Create(Toggle, TweenInfo.new(0.15), {
-            BackgroundColor3 = v and Color3.fromRGB(255, 60, 90) or Color3.fromRGB(45, 40, 50)
+            BackgroundColor3 = v and Theme.Accent or Color3.fromRGB(45, 45, 58)
         }):Play()
         TweenService:Create(Knob, TweenInfo.new(0.15), {
             Position = v and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)
@@ -286,23 +482,31 @@ local function makeToggle(name, default, callback)
         if callback then callback(v) end
     end
     Toggle.MouseButton1Click:Connect(function() update(not state) end)
+
+    Row.MouseEnter:Connect(function()
+        TweenService:Create(Row, TweenInfo.new(0.15), { BackgroundColor3 = Theme.CardHover }):Play()
+    end)
+    Row.MouseLeave:Connect(function()
+        TweenService:Create(Row, TweenInfo.new(0.15), { BackgroundColor3 = Theme.Card }):Play()
+    end)
+
     return { Set = update, Get = function() return state end }
 end
 
-local function makeSlider(name, min, max, default, callback)
+local function makeSlider(parent, name, min, max, default, callback)
     local Row = Instance.new("Frame")
-    Row.Size = UDim2.new(1, 0, 0, 46)
-    Row.BackgroundColor3 = Color3.fromRGB(22, 20, 26)
+    Row.Size = UDim2.new(1, 0, 0, 48)
+    Row.BackgroundColor3 = Theme.Card
     Row.BorderSizePixel = 0
-    Row.Parent = Scroll
+    Row.Parent = parent
     Instance.new("UICorner", Row).CornerRadius = UDim.new(0, 8)
 
     local Label = Instance.new("TextLabel")
     Label.Size = UDim2.new(1, -24, 0, 18)
-    Label.Position = UDim2.new(0, 12, 0, 4)
+    Label.Position = UDim2.new(0, 12, 0, 5)
     Label.BackgroundTransparency = 1
     Label.Text = name .. "  [" .. default .. "]"
-    Label.TextColor3 = Color3.fromRGB(220, 210, 220)
+    Label.TextColor3 = Theme.Text
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.Font = Enum.Font.Gotham
     Label.TextSize = 12
@@ -310,18 +514,25 @@ local function makeSlider(name, min, max, default, callback)
 
     local Track = Instance.new("Frame")
     Track.Size = UDim2.new(1, -24, 0, 6)
-    Track.Position = UDim2.new(0, 12, 0, 28)
-    Track.BackgroundColor3 = Color3.fromRGB(45, 40, 50)
+    Track.Position = UDim2.new(0, 12, 0, 30)
+    Track.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
     Track.BorderSizePixel = 0
     Track.Parent = Row
     Instance.new("UICorner", Track).CornerRadius = UDim.new(1, 0)
 
     local Fill = Instance.new("Frame")
     Fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
-    Fill.BackgroundColor3 = Color3.fromRGB(255, 60, 90)
+    Fill.BackgroundColor3 = Theme.Accent
     Fill.BorderSizePixel = 0
     Fill.Parent = Track
     Instance.new("UICorner", Fill).CornerRadius = UDim.new(1, 0)
+
+    local FillGrad = Instance.new("UIGradient")
+    FillGrad.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Theme.Accent),
+        ColorSequenceKeypoint.new(1, Theme.AccentAlt),
+    }
+    FillGrad.Parent = Fill
 
     local dragging = false
     local function updateFromX(x)
@@ -352,92 +563,120 @@ local function makeSlider(name, min, max, default, callback)
             dragging = false
         end
     end)
+
+    return { Set = function(v) updateFromX(Track.AbsolutePosition.X + (v - min) / (max - min) * Track.AbsoluteSize.X) end }
 end
 
--- CONTROLES
-makeSection("— AIMBOT (HEAD ONLY) —")
-makeToggle("Aimbot", Config.AimbotEnabled, function(v) Config.AimbotEnabled = v end)
-makeToggle("Team Check", Config.TeamCheck, function(v) Config.TeamCheck = v end)
-makeToggle("Wall Check", Config.WallCheck, function(v) Config.WallCheck = v end)
-makeToggle("FOV Circle", Config.ShowFOVCircle, function(v) Config.ShowFOVCircle = v end)
-makeToggle("Target Line", Config.ShowTargetLine, function(v) Config.ShowTargetLine = v end)
-makeSlider("FOV", 30, 800, Config.FOV, function(v) Config.FOV = v end)
-makeSlider("Smoothness", 0.05, 1.0, Config.Smoothness, function(v) Config.Smoothness = v end)
-makeSlider("Prediction", 0, 0.5, Config.Prediction, function(v) Config.Prediction = v end)
-makeSlider("Max Dist", 100, 3000, Config.MaxDist, function(v) Config.MaxDist = v end)
+-- ─────────── CREATE TABS ───────────
+local CombatTab = makeTab("Combat", "COMBAT")
+local VisualTab = makeTab("Visual", "VISUAL")
 
-makeSection("— ESP —")
-makeToggle("ESP", Config.EspEnabled, function(v) Config.EspEnabled = v end)
-makeToggle("Box", Config.EspBox, function(v) Config.EspBox = v end)
-makeToggle("Name", Config.EspName, function(v) Config.EspName = v end)
-makeToggle("Health Bar", Config.EspHealth, function(v) Config.EspHealth = v end)
-makeToggle("Distance", Config.EspDistance, function(v) Config.EspDistance = v end)
-makeToggle("Tracer", Config.EspTracer, function(v) Config.EspTracer = v end)
-makeToggle("Skeleton", Config.EspSkeleton, function(v) Config.EspSkeleton = v end)
-makeToggle("Head Dot", Config.EspHeadDot, function(v) Config.EspHeadDot = v end)
-makeToggle("Chams (Local)", Config.EspChams, function(v) Config.EspChams = v end)
-makeToggle("Team Color", Config.EspTeamColor, function(v) Config.EspTeamColor = v end)
-makeSlider("ESP Max Dist", 200, 5000, Config.EspMaxDist, function(v) Config.EspMaxDist = v end)
-makeSlider("Text Size", 8, 20, Config.EspTextSize, function(v) Config.EspTextSize = v end)
+-- ▓▓▓ COMBAT TAB ▓▓▓
+makeSection(CombatTab, "Aimbot")
+makeToggle(CombatTab, "Aimbot Master Switch", Config.Aimbot, function(v) Config.Aimbot = v end)
+makeToggle(CombatTab, "Team Check", Config.TeamCheck, function(v) Config.TeamCheck = v end)
+makeToggle(CombatTab, "Wall Check", Config.WallCheck, function(v) Config.WallCheck = v end)
+makeSlider(CombatTab, "FOV", 30, 800, Config.FOV, function(v) Config.FOV = v end)
+makeSlider(CombatTab, "Smoothness", 0.05, 1.0, Config.Smoothness, function(v) Config.Smoothness = v end)
+makeSlider(CombatTab, "Prediction", 0, 0.5, Config.Prediction, function(v) Config.Prediction = v end)
+makeSlider(CombatTab, "Max Dist", 100, 3000, Config.MaxDist, function(v) Config.MaxDist = v end)
 
-local minimized = false
-MinBtn.MouseButton1Click:Connect(function()
-    minimized = not minimized
-    TweenService:Create(Main, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
-        Size = minimized and UDim2.new(0, 340, 0, 46) or UDim2.new(0, 340, 0, 560)
-    }):Play()
-    Scroll.Visible = not minimized
+makeSection(CombatTab, "Aimbot Visuals")
+makeToggle(CombatTab, "FOV Circle", Config.FovCircle, function(v) Config.FovCircle = v end)
+makeToggle(CombatTab, "Target Line", Config.TargetLine, function(v) Config.TargetLine = v end)
+
+-- ▓▓▓ VISUAL TAB ▓▓▓
+makeSection(VisualTab, "ESP Master")
+makeToggle(VisualTab, "ESP", Config.Esp, function(v) Config.Esp = v end)
+makeToggle(VisualTab, "Box", Config.EspBox, function(v) Config.EspBox = v end)
+makeToggle(VisualTab, "Name", Config.EspName, function(v) Config.EspName = v end)
+makeToggle(VisualTab, "Health Bar", Config.EspHealth, function(v) Config.EspHealth = v end)
+makeToggle(VisualTab, "Distance", Config.EspDistance, function(v) Config.EspDistance = v end)
+makeToggle(VisualTab, "Tracer", Config.EspTracer, function(v) Config.EspTracer = v end)
+makeToggle(VisualTab, "Skeleton", Config.EspSkeleton, function(v) Config.EspSkeleton = v end)
+makeToggle(VisualTab, "Head Dot", Config.EspHeadDot, function(v) Config.EspHeadDot = v end)
+makeToggle(VisualTab, "Chams (Local)", Config.EspChams, function(v) Config.EspChams = v end)
+makeToggle(VisualTab, "Team Color", Config.EspTeamColor, function(v) Config.EspTeamColor = v end)
+
+makeSection(VisualTab, "ESP Settings")
+makeSlider(VisualTab, "ESP Max Dist", 200, 5000, Config.EspMaxDist, function(v) Config.EspMaxDist = v end)
+makeSlider(VisualTab, "Text Size", 8, 20, Config.EspTextSize, function(v) Config.EspTextSize = v end)
+
+switchTab("Combat")
+
+-- ═══════════════════════════════════════════════════════════
+--  TOGGLE WINDOW
+-- ═══════════════════════════════════════════════════════════
+local windowOpen = true
+ToggleBtn.MouseButton1Click:Connect(function()
+    windowOpen = not windowOpen
+    if windowOpen then
+        Main.Visible = true
+        Main.Size = UDim2.new(0, 0, 0, 0)
+        Main.Position = UDim2.new(0.5, 0, 0.5, 0)
+        TweenService:Create(Main, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, 400, 0, 340),
+            Position = UDim2.new(0.5, -200, 0.5, -170),
+        }):Play()
+    else
+        TweenService:Create(Main, TweenInfo.new(0.15), {
+            Size = UDim2.new(0, 0, 0, 0),
+            Position = UDim2.new(0.5, 0, 0.5, 0),
+        }):Play()
+        task.wait(0.15)
+        Main.Visible = false
+    end
 end)
 
--- ============================================================
--- FOV CIRCLE + TARGET LINE
--- ============================================================
-local FOVGui = Instance.new("ScreenGui")
-FOVGui.Name = "FOVCircle"
-FOVGui.ResetOnSpawn = false
-FOVGui.IgnoreGuiInset = true
-FOVGui.Parent = ScreenGui.Parent
+-- ═══════════════════════════════════════════════════════════
+--  OVERLAYS (FOV, TARGET LINE, HEAD MARKER)
+-- ═══════════════════════════════════════════════════════════
+local OverlayGui = Instance.new("ScreenGui")
+OverlayGui.Name = "ZeusOverlays"
+OverlayGui.ResetOnSpawn = false
+OverlayGui.IgnoreGuiInset = true
+OverlayGui.Parent = ScreenGui.Parent
 
 local FOVCircle = Instance.new("Frame")
 FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 FOVCircle.BackgroundTransparency = 1
 FOVCircle.Size = UDim2.new(0, 400, 0, 400)
-FOVCircle.Parent = FOVGui
+FOVCircle.Visible = false
+FOVCircle.Parent = OverlayGui
 Instance.new("UICorner", FOVCircle).CornerRadius = UDim.new(1, 0)
 
 local CircleStroke = Instance.new("UIStroke")
-CircleStroke.Color = Color3.fromRGB(255, 60, 90)
+CircleStroke.Color = Theme.Accent
 CircleStroke.Thickness = 1.5
-CircleStroke.Transparency = 0.4
+CircleStroke.Transparency = 0.35
 CircleStroke.Parent = FOVCircle
 
 local TargetLine = Instance.new("Frame")
-TargetLine.BackgroundColor3 = Color3.fromRGB(255, 60, 90)
+TargetLine.BackgroundColor3 = Theme.Accent
 TargetLine.BorderSizePixel = 0
-TargetLine.BackgroundTransparency = 0.3
+TargetLine.BackgroundTransparency = 0.35
 TargetLine.Visible = false
 TargetLine.ZIndex = 0
-TargetLine.Parent = FOVGui
+TargetLine.Parent = OverlayGui
 
--- crosshair no head do alvo atual
 local HeadMarker = Instance.new("Frame")
 HeadMarker.Size = UDim2.new(0, 18, 0, 18)
 HeadMarker.AnchorPoint = Vector2.new(0.5, 0.5)
 HeadMarker.BackgroundTransparency = 1
 HeadMarker.Visible = false
-HeadMarker.Parent = FOVGui
+HeadMarker.Parent = OverlayGui
 
 local HeadMarkerStroke = Instance.new("UIStroke")
-HeadMarkerStroke.Color = Color3.fromRGB(255, 60, 90)
+HeadMarkerStroke.Color = Theme.Accent
 HeadMarkerStroke.Thickness = 2
 HeadMarkerStroke.Parent = HeadMarker
 Instance.new("UICorner", HeadMarker).CornerRadius = UDim.new(1, 0)
 
--- ============================================================
--- ESP
--- ============================================================
+-- ═══════════════════════════════════════════════════════════
+--  ESP
+-- ═══════════════════════════════════════════════════════════
 local EspGui = Instance.new("ScreenGui")
-EspGui.Name = "CrushPvP_ESP"
+EspGui.Name = "ZeusESP"
 EspGui.ResetOnSpawn = false
 EspGui.IgnoreGuiInset = true
 EspGui.Parent = ScreenGui.Parent
@@ -457,7 +696,7 @@ local function createEspFor(plr)
     box.Parent = EspFolder
 
     local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(255, 60, 90)
+    stroke.Color = Theme.Accent
     stroke.Thickness = 1.5
     stroke.Parent = box
 
@@ -496,7 +735,7 @@ local function createEspFor(plr)
     Instance.new("UICorner", healthBarBg).CornerRadius = UDim.new(0, 3)
 
     local healthBar = Instance.new("Frame")
-    healthBar.BackgroundColor3 = Color3.fromRGB(60, 220, 90)
+    healthBar.BackgroundColor3 = Theme.Success
     healthBar.BorderSizePixel = 0
     healthBar.Size = UDim2.new(1, 0, 1, 0)
     healthBar.Parent = healthBarBg
@@ -505,7 +744,7 @@ local function createEspFor(plr)
     local headDot = Instance.new("Frame")
     headDot.Size = UDim2.new(0, 6, 0, 6)
     headDot.AnchorPoint = Vector2.new(0.5, 0.5)
-    headDot.BackgroundColor3 = Color3.fromRGB(255, 60, 90)
+    headDot.BackgroundColor3 = Theme.Accent
     headDot.BorderSizePixel = 0
     headDot.Visible = false
     headDot.ZIndex = 3
@@ -513,7 +752,7 @@ local function createEspFor(plr)
     Instance.new("UICorner", headDot).CornerRadius = UDim.new(1, 0)
 
     local tracer = Instance.new("Frame")
-    tracer.BackgroundColor3 = Color3.fromRGB(255, 60, 90)
+    tracer.BackgroundColor3 = Theme.Accent
     tracer.BorderSizePixel = 0
     tracer.AnchorPoint = Vector2.new(0.5, 0)
     tracer.Visible = false
@@ -587,40 +826,45 @@ local function drawSkeleton(cache, char, color)
     end
 end
 
--- ============================================================
--- INPUT
--- ============================================================
+-- ═══════════════════════════════════════════════════════════
+--  INPUT
+-- ═══════════════════════════════════════════════════════════
 local aimActive = false
+
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
     if input.UserInputType == Config.AimKey then aimActive = true end
+
     if input.KeyCode == Enum.KeyCode.RightShift then
-        Config.AimbotEnabled = not Config.AimbotEnabled
+        Config.Aimbot = not Config.Aimbot
     elseif input.KeyCode == Enum.KeyCode.Insert then
-        Config.EspEnabled = not Config.EspEnabled
+        Config.Esp = not Config.Esp
+    elseif input.KeyCode == Enum.KeyCode.RightControl then
+        ToggleBtn.MouseButton1Click:Fire()
     end
 end)
+
 UserInputService.InputEnded:Connect(function(input, gp)
     if input.UserInputType == Config.AimKey then aimActive = false end
 end)
 
--- ============================================================
--- LOOP
--- ============================================================
+-- ═══════════════════════════════════════════════════════════
+--  MAIN LOOP
+-- ═══════════════════════════════════════════════════════════
 RunService.RenderStepped:Connect(function()
     -- FOV circle
-    if Config.ShowFOVCircle then
+    if Config.FovCircle then
         FOVCircle.Visible = true
         FOVCircle.Position = UDim2.new(0, Camera.ViewportSize.X / 2, 0, Camera.ViewportSize.Y / 2)
         FOVCircle.Size = UDim2.new(0, Config.FOV * 2, 0, Config.FOV * 2)
-        CircleStroke.Color = Config.AimbotEnabled and Color3.fromRGB(255, 60, 90) or Color3.fromRGB(100, 100, 100)
+        CircleStroke.Color = Config.Aimbot and Theme.Accent or Color3.fromRGB(80, 80, 90)
     else
         FOVCircle.Visible = false
     end
 
-    -- AIMBOT — SOMENTE CABEÇA
+    -- AIMBOT
     local target = nil
-    if Config.AimbotEnabled and aimActive then
+    if Config.Aimbot and aimActive then
         target = getClosestTarget()
     end
 
@@ -632,17 +876,16 @@ RunService.RenderStepped:Connect(function()
             local targetCF = CFrame.new(camCF.Position, camCF.Position + dir)
             Camera.CFrame = camCF:Lerp(targetCF, 1 - Config.Smoothness)
 
-            -- marca a cabeça do alvo atual
             local hsp, hon = worldToScreen(aimPos)
             if hon then
                 HeadMarker.Visible = true
                 HeadMarker.Position = UDim2.new(0, hsp.X, 0, hsp.Y)
-                HeadMarkerStroke.Color = Color3.fromRGB(255, 60, 90)
+                HeadMarkerStroke.Color = Theme.Accent
             else
                 HeadMarker.Visible = false
             end
 
-            if Config.ShowTargetLine then
+            if Config.TargetLine then
                 local sp, on = worldToScreen(aimPos)
                 if on then
                     local startPos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
@@ -655,6 +898,7 @@ RunService.RenderStepped:Connect(function()
                     TargetLine.Size = UDim2.new(0, len, 0, 1)
                     TargetLine.Position = UDim2.new(0, (startPos.X + endPos.X) / 2, 0, (startPos.Y + endPos.Y) / 2)
                     TargetLine.Rotation = math.deg(math.atan2(dy, dx))
+                    TargetLine.BackgroundColor3 = Theme.Accent
                 end
             else
                 TargetLine.Visible = false
@@ -672,12 +916,14 @@ RunService.RenderStepped:Connect(function()
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr == LocalPlayer then continue end
         local cache = espCache[plr]
-        if not Config.EspEnabled or not isAlive(plr) then
+        if not Config.Esp or not isAlive(plr) then
             if cache then
                 cache.box.Visible = false
                 cache.headDot.Visible = false
                 cache.tracer.Visible = false
                 for _, l in ipairs(cache.skeletonLines) do l.Visible = false end
+                local hl = plr.Character and plr.Character:FindFirstChild("__ZEUS_HL")
+                if hl then hl:Destroy() end
             end
             continue
         end
@@ -719,10 +965,10 @@ RunService.RenderStepped:Connect(function()
         cache.box.Position = UDim2.new(0, cx - width / 2, 0, topSP.Y)
         cache.box.Size = UDim2.new(0, width, 0, height)
 
-        local color = Color3.fromRGB(255, 60, 90)
+        local color = Theme.Accent
         if Config.EspTeamColor then
             if LocalPlayer.Team and plr.Team then
-                color = (plr.Team == LocalPlayer.Team) and Color3.fromRGB(80, 220, 120) or Color3.fromRGB(255, 60, 90)
+                color = (plr.Team == LocalPlayer.Team) and Theme.Success or Theme.Danger
             elseif plr.Team then
                 color = plr.Team.TeamColor.Color
             end
@@ -794,10 +1040,10 @@ RunService.RenderStepped:Connect(function()
         end
 
         if Config.EspChams then
-            local hl = char:FindFirstChild("__ESP_HL")
+            local hl = char:FindFirstChild("__ZEUS_HL")
             if not hl then
                 hl = Instance.new("Highlight")
-                hl.Name = "__ESP_HL"
+                hl.Name = "__ZEUS_HL"
                 hl.FillTransparency = 0.5
                 hl.OutlineTransparency = 0
                 hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
@@ -806,7 +1052,7 @@ RunService.RenderStepped:Connect(function()
             hl.FillColor = color
             hl.OutlineColor = color
         else
-            local hl = char:FindFirstChild("__ESP_HL")
+            local hl = char:FindFirstChild("__ZEUS_HL")
             if hl then hl:Destroy() end
         end
     end
@@ -816,5 +1062,8 @@ Players.PlayerRemoving:Connect(function(plr)
     removeEspFor(plr)
 end)
 
-print("[Crush PvP Headlock] carregado")
-print("Hotkeys: RightShift=Aimbot | Insert=ESP | Botão direito = segurar mira")
+print("[Zeus Aimbot] carregado")
+print("  RightShift   → toggle Aimbot")
+print("  Insert       → toggle ESP")
+print("  RightControl → abrir/fechar painel")
+print("  Botão direito → segurar mira (quando aimbot ON)")
